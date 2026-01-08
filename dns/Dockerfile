@@ -10,14 +10,10 @@ RUN apt-get update && apt-get install -y \
 # Remove default config
 RUN rm -f /etc/powerdns/pdns.d/bind.conf
 
-# Copy template config
+# Copy template config and entrypoint script
 COPY pdns.conf.template /etc/powerdns/pdns.d/gmysql.conf.template
-
-# Create entrypoint script
-RUN echo '#!/bin/bash\n\
-envsubst < /etc/powerdns/pdns.d/gmysql.conf.template > /etc/powerdns/pdns.d/gmysql.conf\n\
-exec /usr/sbin/pdns_server\n\
-' > /entrypoint.sh && chmod +x /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 53/tcp
 EXPOSE 53/udp
