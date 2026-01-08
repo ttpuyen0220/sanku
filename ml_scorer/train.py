@@ -4,14 +4,10 @@ import joblib
 import re
 import urllib.parse
 import warnings
-import logging
+from logging_config import setup_logging
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 # --- 1. Suppress Harmless Warnings ---
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn.utils.parallel")

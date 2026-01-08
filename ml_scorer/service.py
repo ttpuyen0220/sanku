@@ -7,14 +7,10 @@ import re
 import json
 import psutil
 import time
-import logging
+from logging_config import setup_logging
 
 # Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = setup_logging()
 
 app = FastAPI()
 MODEL_PATH = "waf_model.pkl"
@@ -167,7 +163,7 @@ def predict(data: RequestData):
     global request_count
     request_count += 1
     
-    logger.debug(f"Request #{request_count} - Path: {data.path}")
+    logger.debug("Request #%s - Path: %s", request_count, data.path)
 
     if not model:
         logger.error("Model not loaded")
