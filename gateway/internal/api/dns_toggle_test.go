@@ -12,6 +12,9 @@ import (
 
 // TestDNSRecordToggleRequestParsing tests that the updateRecord function
 // correctly parses toggle requests for both proxy and origin SSL
+//
+// Note: These are unit tests that verify the request parsing logic and model structure.
+// For full integration tests with MongoDB and PowerDNS, use the docker-compose environment.
 func TestDNSRecordToggleRequestParsing(t *testing.T) {
 	tests := []struct {
 		name           string

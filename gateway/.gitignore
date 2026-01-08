@@ -1,1 +1,10 @@
-gateway/server
+# Binary files
+server
+bin/
+*.exe
+
+# Test files
+*.test
+
+# Go build cache
+go.sum.bak
