@@ -82,11 +82,11 @@ func main() {
 			}
 
 			targetURL, _ = url.Parse(rawTarget)
-			log.Printf("[Proxy] Routing %s -> %s (SSL: %v)", incomingHost, rawTarget, record.OriginSSL)
+			// Removed proxy routing log - only suspicious/malicious requests are logged via logger.LogAttack
 		} else {
 			// Fallback if no user record exists
 			targetURL, _ = url.Parse(defaultOrigin)
-			log.Printf("[Proxy] No user record found for %s, using default: %s", incomingHost, defaultOrigin)
+			// Removed proxy routing log - only suspicious/malicious requests are logged via logger.LogAttack
 		}
 
 		req.URL.Scheme = targetURL.Scheme
