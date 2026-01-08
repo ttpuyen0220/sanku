@@ -7,7 +7,7 @@ import warnings
 from logging_config import setup_logging
 
 # Configure logging
-logger = setup_logging()
+logger = setup_logging(__name__)
 
 # --- 1. Suppress Harmless Warnings ---
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn.utils.parallel")

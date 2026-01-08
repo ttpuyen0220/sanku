@@ -10,7 +10,7 @@ import time
 from logging_config import setup_logging
 
 # Configure logging
-logger = setup_logging()
+logger = setup_logging(__name__)
 
 app = FastAPI()
 MODEL_PATH = "waf_model.pkl"
