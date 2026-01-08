@@ -13,7 +13,7 @@ from logging_config import setup_logging
 logger = setup_logging(__name__)
 
 app = FastAPI()
-MODEL_PATH = "waf_model.pkl"
+MODEL_PATH = os.getenv("MODEL_PATH", "/app/waf_model.pkl")
 model = None
 
 # Stats tracking
