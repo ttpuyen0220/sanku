@@ -4,6 +4,14 @@ import joblib
 import re
 import urllib.parse
 import warnings
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 # --- 1. Suppress Harmless Warnings ---
 warnings.filterwarnings("ignore", category=UserWarning, module="sklearn.utils.parallel")
@@ -54,7 +62,7 @@ def load_data():
     normal_dir = os.path.join("data", "normal")
     malicious_dir = os.path.join("data", "malicious")
 
-    print("📂 Loading Payload Data...")
+    logger.info("Loading Payload Data...")
 
     # 1. Load Normal Data
     if os.path.exists(normal_dir):
@@ -66,7 +74,7 @@ def load_data():
                     X.extend(lines)
                     y.extend(["Normal"] * len(lines))
             except Exception as e:
-                print(f"   ⚠️ Skipped {filepath}: {e}")
+                logger.warning(f"Skipped {filepath}: {e}")
 
     # 2. Load Malicious Data
     if os.path.exists(malicious_dir):
@@ -79,7 +87,7 @@ def load_data():
                     X.extend(lines)
                     y.extend([label] * len(lines))
             except Exception as e:
-                print(f"   ⚠️ Skipped {filepath}: {e}")
+                logger.warning(f"Skipped {filepath}: {e}")
 
     return X, y
 
@@ -88,12 +96,12 @@ def train_and_save():
     X, y = load_data()
     
     if len(X) == 0:
-        print("❌ Error: No data found in 'data/' folders. Creating dummy model for build to pass...")
+        logger.error("No data found in 'data/' folders. Creating dummy model for build to pass...")
         # Create minimal dummy data to prevent build failure if data is missing
         X = ["safe", "attack"]
         y = ["Normal", "sql_injection"]
 
-    print(f"✅ Loaded {len(X)} total samples.")
+    logger.info(f"Loaded {len(X)} total samples.")
 
     # 2. Split Data
     X_train, X_test, y_train, y_test = train_test_split(
@@ -101,7 +109,7 @@ def train_and_save():
     )
 
     # 3. Build Pipeline
-    print("⚙️  Training Random Forest...")
+    logger.info("Training Random Forest...")
     model = make_pipeline(
         TfidfVectorizer(analyzer='char', ngram_range=(3, 5), min_df=2), 
         RandomForestClassifier(n_estimators=100, n_jobs=-1, class_weight='balanced')
@@ -110,14 +118,14 @@ def train_and_save():
     model.fit(X_train, y_train)
 
     # 4. Evaluation
-    print("📊 Evaluating...")
+    logger.info("Evaluating...")
     y_pred = model.predict(X_test)
     acc = accuracy_score(y_test, y_pred)
-    print(f"✅ Accuracy: {acc:.4f}")
+    logger.info(f"Accuracy: {acc:.4f}")
 
     # 5. Save Model (To root, same as service.py expects)
     joblib.dump(model, "waf_model.pkl")
-    print("💾 Model saved to 'waf_model.pkl'")
+    logger.info("Model saved to 'waf_model.pkl'")
 
 if __name__ == "__main__":
     train_and_save()
