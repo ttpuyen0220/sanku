@@ -15,6 +15,7 @@ import (
 	"web-app-firewall-ml-detection/internal/database"
 	"web-app-firewall-ml-detection/internal/limiter"
 	"web-app-firewall-ml-detection/internal/logger"
+	"web-app-firewall-ml-detection/internal/router"
 	"web-app-firewall-ml-detection/pkg/config"
 	"web-app-firewall-ml-detection/pkg/middleware"
 
@@ -119,25 +120,8 @@ func main() {
 	// 6. INIT API HANDLER
 	apiHandler := api.NewAPIHandler(client, proxy, rateLimiter, cfg, cfg.ML.URL, defaultOrigin, cfg.Server.WafPublicIP, page404)
 
-	// 7. DEFINE ROUTES
-	mux := http.NewServeMux()
-	mux.HandleFunc("/api/status", apiHandler.SystemStatus)
-	mux.HandleFunc("/api/auth/register", apiHandler.Register)
-	mux.HandleFunc("/api/auth/login", apiHandler.Login)
-	mux.HandleFunc("/api/auth/logout", apiHandler.Logout)
-	mux.HandleFunc("/api/auth/check", middleware.Auth(apiHandler.CheckAuth))
-	mux.HandleFunc("/api/stream", apiHandler.SSEHandler)
-	mux.HandleFunc("/api/domains", middleware.Auth(apiHandler.ListDomains))
-	mux.HandleFunc("/api/domains/add", middleware.Auth(apiHandler.AddDomain))
-	mux.HandleFunc("/api/domains/verify", middleware.Auth(apiHandler.VerifyDomain))
-	mux.HandleFunc("/api/dns/records", middleware.Auth(apiHandler.ManageRecords))
-	mux.HandleFunc("/api/rules/global", middleware.Auth(apiHandler.GetGlobalRules))
-	mux.HandleFunc("/api/rules/custom", middleware.Auth(apiHandler.GetCustomRules))
-	mux.HandleFunc("/api/rules/custom/add", middleware.Auth(apiHandler.AddCustomRule))
-	mux.HandleFunc("/api/rules/custom/delete", middleware.Auth(apiHandler.DeleteCustomRule))
-	mux.HandleFunc("/api/rules/toggle", middleware.Auth(apiHandler.ToggleRule))
-	mux.HandleFunc("/api/logs/secure", middleware.Auth(apiHandler.SecuredLogsHandler))
-	mux.HandleFunc("/", apiHandler.WAFHandler)
+	// 7. SETUP ROUTES
+	mux := router.Setup(apiHandler)
 
 	// ---------------------------------------------------------
 	// 8. HTTPS AUTO-CERT CONFIGURATION

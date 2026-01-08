@@ -2,6 +2,7 @@ package response
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 )
 
@@ -40,7 +41,9 @@ func Success(w http.ResponseWriter, data interface{}, message string) {
 		Data:    data,
 	}
 	
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+	}
 }
 
 // Created sends a 201 Created response
@@ -54,7 +57,9 @@ func Created(w http.ResponseWriter, data interface{}, message string) {
 		Data:    data,
 	}
 	
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+	}
 }
 
 // Error sends an error JSON response
@@ -68,7 +73,9 @@ func Error(w http.ResponseWriter, message string, statusCode int) {
 		Error:   message,
 	}
 	
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+	}
 }
 
 // BadRequest sends a 400 Bad Request response
@@ -122,12 +129,16 @@ func Paginated(w http.ResponseWriter, data interface{}, pagination Pagination) {
 		Pagination: pagination,
 	}
 	
-	json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+	}
 }
 
 // JSON sends a custom JSON response with specified status code
 func JSON(w http.ResponseWriter, data interface{}, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		log.Printf("Error encoding JSON response: %v", err)
+	}
 }

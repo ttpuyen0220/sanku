@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -86,7 +87,7 @@ func TTL(ttl int) error {
 // MinLength checks if string meets minimum length requirement
 func MinLength(value string, min int, fieldName string) error {
 	if len(value) < min {
-		return errors.New(fieldName + " must be at least " + string(rune(min)) + " characters")
+		return errors.New(fieldName + " must be at least " + strconv.Itoa(min) + " characters")
 	}
 	return nil
 }
@@ -94,7 +95,7 @@ func MinLength(value string, min int, fieldName string) error {
 // MaxLength checks if string doesn't exceed maximum length
 func MaxLength(value string, max int, fieldName string) error {
 	if len(value) > max {
-		return errors.New(fieldName + " must not exceed " + string(rune(max)) + " characters")
+		return errors.New(fieldName + " must not exceed " + strconv.Itoa(max) + " characters")
 	}
 	return nil
 }
