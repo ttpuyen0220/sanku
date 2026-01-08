@@ -35,3 +35,7 @@ go.work.sum
 
 #ml_scorer (Python virtual environment)
 venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
