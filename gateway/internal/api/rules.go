@@ -7,6 +7,8 @@ import (
 
 	"web-app-firewall-ml-detection/internal/database"
 	"web-app-firewall-ml-detection/internal/detector"
+	"web-app-firewall-ml-detection/pkg/middleware"
+	"web-app-firewall-ml-detection/pkg/response"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -28,7 +30,12 @@ func resolveEnabledStatus(ruleID, domainID string, policies map[policyKey]bool, 
 // --- 1.GLOBAL RULES (System Managed) ---
 
 func (h *APIHandler) GetGlobalRules(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID, ok := middleware.GetUserID(r)
+	if !ok {
+		response.InternalServerError(w, "Server Error")
+		return
+	}
+	
 	domainID := r.URL.Query().Get("domain_id")
 
 	// 1.Fetch only Global Rules (OwnerID is empty/null)
@@ -39,14 +46,14 @@ func (h *APIHandler) GetGlobalRules(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	if err != nil {
-		h.WriteJSONError(w, "Failed to fetch rules", http.StatusInternalServerError)
+		response.InternalServerError(w, "Failed to fetch rules")
 		return
 	}
 
 	// 2.Fetch only THIS user's policies
 	policies, err := database.GetPoliciesByUser(h.MongoClient, userID)
 	if err != nil {
-		h.WriteJSONError(w, "Failed to fetch policies", http.StatusInternalServerError)
+		response.InternalServerError(w, "Failed to fetch policies")
 		return
 	}
 
@@ -61,27 +68,31 @@ func (h *APIHandler) GetGlobalRules(w http.ResponseWriter, r *http.Request) {
 		rules[i].Enabled = resolveEnabledStatus(rules[i].ID, domainID, userPolicies, true)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(rules)
+	response.JSON(w, rules, http.StatusOK)
 }
 
 // --- 2.CUSTOM RULES (User Managed) ---
 
 func (h *APIHandler) GetCustomRules(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID, ok := middleware.GetUserID(r)
+	if !ok {
+		response.InternalServerError(w, "Server Error")
+		return
+	}
+	
 	domainID := r.URL.Query().Get("domain_id")
 
 	// 1.Fetch only Custom Rules owned by this user
 	rules, err := database.GetRules(h.MongoClient, bson.M{"owner_id": userID})
 	if err != nil {
-		h.WriteJSONError(w, "Failed to fetch rules", http.StatusInternalServerError)
+		response.InternalServerError(w, "Failed to fetch rules")
 		return
 	}
 
 	// 2.Fetch policies
 	policies, err := database.GetPoliciesByUser(h.MongoClient, userID)
 	if err != nil {
-		h.WriteJSONError(w, "Failed to fetch policies", http.StatusInternalServerError)
+		response.InternalServerError(w, "Failed to fetch policies")
 		return
 	}
 
@@ -97,21 +108,24 @@ func (h *APIHandler) GetCustomRules(w http.ResponseWriter, r *http.Request) {
 		rules[i].Enabled = resolveEnabledStatus(rules[i].ID, domainID, userPolicies, true)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(rules)
+	response.JSON(w, rules, http.StatusOK)
 }
 
 func (h *APIHandler) AddCustomRule(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.WriteJSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		response.MethodNotAllowed(w)
 		return
 	}
 
-	userID := r.Context().Value("user_id").(string)
+	userID, ok := middleware.GetUserID(r)
+	if !ok {
+		response.InternalServerError(w, "Server Error")
+		return
+	}
 
 	var rule detector.WAFRule
 	if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
-		h.WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
+		response.BadRequest(w, "Invalid JSON")
 		return
 	}
 
@@ -124,48 +138,55 @@ func (h *APIHandler) AddCustomRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := database.AddRule(h.MongoClient, rule); err != nil {
-		h.WriteJSONError(w, err.Error(), http.StatusInternalServerError)
+		response.InternalServerError(w, err.Error())
 		return
 	}
 
 	h.ReloadRules()
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Custom rule created"})
+	response.Created(w, nil, "Custom rule created")
 }
 
 func (h *APIHandler) DeleteCustomRule(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
-		h.WriteJSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		response.MethodNotAllowed(w)
 		return
 	}
 
-	userID := r.Context().Value("user_id").(string)
+	userID, ok := middleware.GetUserID(r)
+	if !ok {
+		response.InternalServerError(w, "Server Error")
+		return
+	}
+	
 	ruleID := r.URL.Query().Get("id")
 
 	if ruleID == "" {
-		h.WriteJSONError(w, "Missing Rule ID", http.StatusBadRequest)
+		response.BadRequest(w, "Missing Rule ID")
 		return
 	}
 
 	if err := database.DeleteRule(h.MongoClient, ruleID, userID); err != nil {
-		h.WriteJSONError(w, "Cannot delete rule: "+err.Error(), http.StatusForbidden)
+		response.Forbidden(w, "Cannot delete rule: "+err.Error())
 		return
 	}
 
 	h.ReloadRules()
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Rule deleted"})
+	response.Success(w, nil, "Rule deleted")
 }
 
 // --- 3.SHARED ACTIONS ---
 
 func (h *APIHandler) ToggleRule(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.WriteJSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		response.MethodNotAllowed(w)
 		return
 	}
 
-	userID := r.Context().Value("user_id").(string)
+	userID, ok := middleware.GetUserID(r)
+	if !ok {
+		response.InternalServerError(w, "Server Error")
+		return
+	}
 
 	var payload struct {
 		ID       string `json:"id"`
@@ -174,12 +195,12 @@ func (h *APIHandler) ToggleRule(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		h.WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
+		response.BadRequest(w, "Invalid JSON")
 		return
 	}
 
 	if payload.ID == "" {
-		h.WriteJSONError(w, "Missing 'id'", http.StatusBadRequest)
+		response.BadRequest(w, "Missing 'id'")
 		return
 	}
 
@@ -192,15 +213,13 @@ func (h *APIHandler) ToggleRule(w http.ResponseWriter, r *http.Request) {
 
 	if err := database.UpsertRulePolicy(h.MongoClient, policy); err != nil {
 		log.Printf("[ERROR] Failed to save policy: %v", err)
-		h.WriteJSONError(w, "Failed to update policy", http.StatusInternalServerError)
+		response.InternalServerError(w, "Failed to update policy")
 		return
 	}
 
 	h.ReloadRules()
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message": "Rule status updated",
+	response.Success(w, map[string]interface{}{
 		"id":      payload.ID,
 		"enabled": payload.Enabled,
-	})
+	}, "Rule status updated")
 }

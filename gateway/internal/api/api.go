@@ -1,10 +1,7 @@
 package api
 
 import (
-	"encoding/json"
 	"log"
-	"net/http"
-	"net/http/httputil"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,6 +10,7 @@ import (
 	"web-app-firewall-ml-detection/internal/database"
 	"web-app-firewall-ml-detection/internal/detector"
 	"web-app-firewall-ml-detection/internal/limiter"
+	"net/http/httputil"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"

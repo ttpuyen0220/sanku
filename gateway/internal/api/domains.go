@@ -13,6 +13,9 @@ import (
 
 	"web-app-firewall-ml-detection/internal/database"
 	"web-app-firewall-ml-detection/internal/detector"
+	"web-app-firewall-ml-detection/pkg/middleware"
+	"web-app-firewall-ml-detection/pkg/response"
+	"web-app-firewall-ml-detection/pkg/validator"
 )
 
 var realNameservers = []string{
@@ -39,15 +42,25 @@ func getRootDomain(domain string) string {
 
 func (h *APIHandler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.WriteJSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		response.MethodNotAllowed(w)
 		return
 	}
 
-	userID := r.Context().Value("user_id").(string)
+	userID, ok := middleware.GetUserID(r)
+	if !ok {
+		response.InternalServerError(w, "Server Error")
+		return
+	}
 
 	var domain detector.Domain
 	if err := json.NewDecoder(r.Body).Decode(&domain); err != nil {
-		h.WriteJSONError(w, "Invalid JSON", http.StatusBadRequest)
+		response.BadRequest(w, "Invalid JSON")
+		return
+	}
+
+	// Validate domain name
+	if err := validator.Domain(domain.Name); err != nil {
+		response.BadRequest(w, "Invalid domain name")
 		return
 	}
 
@@ -56,11 +69,7 @@ func (h *APIHandler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	if rootZone != domain.Name {
 		existingRoot, err := database.GetDomainByName(h.MongoClient, rootZone)
 		if err == nil && existingRoot != nil {
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error":   "Root domain exists",
-				"message": fmt.Sprintf("The root domain '%s' is already registered. Please add '%s' as an A Record.", rootZone, domain.Name),
-			})
+			response.Conflict(w, fmt.Sprintf("The root domain '%s' is already registered. Please add '%s' as an A Record.", rootZone, domain.Name))
 			return
 		}
 	}
@@ -84,10 +93,10 @@ func (h *APIHandler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	createdDomain, err := database.CreateDomain(h.MongoClient, domain)
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate key") {
-			h.WriteJSONError(w, "Domain already exists", http.StatusConflict)
+			response.Conflict(w, "Domain already exists")
 			return
 		}
-		h.WriteJSONError(w, "Failed to create domain in DB", http.StatusInternalServerError)
+		response.InternalServerError(w, "Failed to create domain in DB")
 		return
 	}
 
@@ -100,8 +109,7 @@ func (h *APIHandler) AddDomain(w http.ResponseWriter, r *http.Request) {
 	// NOTE: We do NOT create a default A record here. The zone is created empty.
 	// The user must verify the domain and then explicitly add records.
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(createdDomain)
+	response.Created(w, createdDomain, "Domain added successfully")
 }
 
 // checkRegistrarRDAP queries the Official Registry (RDAP) to find the configured Nameservers.
@@ -150,25 +158,25 @@ func checkRegistrarRDAP(domain string) ([]string, error) {
 
 func (h *APIHandler) VerifyDomain(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		h.WriteJSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		response.MethodNotAllowed(w)
 		return
 	}
 
 	domainID := r.URL.Query().Get("id")
 	if domainID == "" {
-		h.WriteJSONError(w, "Missing domain id", http.StatusBadRequest)
+		response.BadRequest(w, "Missing domain id")
 		return
 	}
 
 	domain, err := database.GetDomainByID(h.MongoClient, domainID)
 	if err != nil {
-		h.WriteJSONError(w, "Domain not found", http.StatusNotFound)
+		response.NotFound(w, "Domain not found")
 		return
 	}
 
-	userID := r.Context().Value("user_id").(string)
-	if domain.UserID != userID {
-		h.WriteJSONError(w, "Unauthorized", http.StatusForbidden)
+	userID, ok := middleware.GetUserID(r)
+	if !ok || domain.UserID != userID {
+		response.Forbidden(w, "Unauthorized")
 		return
 	}
 
@@ -176,11 +184,7 @@ func (h *APIHandler) VerifyDomain(w http.ResponseWriter, r *http.Request) {
 	foundNS, err := checkRegistrarRDAP(domain.Name)
 	if err != nil {
 		log.Printf("RDAP Lookup failed: %v", err)
-		w.WriteHeader(http.StatusServiceUnavailable)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": "Verification Unavailable", 
-			"details": err.Error(),
-		})
+		response.ServiceUnavailable(w, "Verification Unavailable: "+err.Error())
 		return
 	}
 
@@ -202,9 +206,7 @@ func (h *APIHandler) VerifyDomain(w http.ResponseWriter, r *http.Request) {
 
 	verified := (matchedCount == len(domain.Nameservers)) && (len(domain.Nameservers) > 0)
 
-	w.Header().Set("Content-Type", "application/json")
-
-if verified {
+	if verified {
 		// 1. CRITICAL: Revoke old ownership
 		// If another user had this domain (Active or Pending), remove their record
 		// so this new User becomes the sole Owner.
@@ -218,31 +220,30 @@ if verified {
 		// 2. Activate the new domain
 		err = database.UpdateDomainStatus(h.MongoClient, domain.ID, "active")
 		if err != nil {
-			h.WriteJSONError(w, "DB Update failed", http.StatusInternalServerError)
+			response.InternalServerError(w, "DB Update failed")
 			return
 		}
 
-		json.NewEncoder(w).Encode(map[string]string{
-			"status":  "active",
-			"message": "Domain successfully verified! You are now the owner.",
-		})
+		response.Success(w, map[string]string{
+			"status": "active",
+		}, "Domain successfully verified! You are now the owner.")
 	} else {
-		w.WriteHeader(http.StatusConflict)
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":             "pending_verification",
-			"message":            "Verification failed. Your Registrar nameservers do not match the assigned ones.",
-			"assigned_ns":        domain.Nameservers,
-			"found_at_registrar": foundNS,
-		})
+		response.Conflict(w, fmt.Sprintf("Verification failed. Your Registrar nameservers do not match the assigned ones. Assigned: %v, Found: %v", domain.Nameservers, foundNS))
 	}
 }
 
 func (h *APIHandler) ListDomains(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
-	domains, err := database.GetDomainsByUser(h.MongoClient, userID)
-	if err != nil {
-		h.WriteJSONError(w, "Failed to fetch domains", http.StatusInternalServerError)
+	userID, ok := middleware.GetUserID(r)
+	if !ok {
+		response.InternalServerError(w, "Server Error")
 		return
 	}
-	json.NewEncoder(w).Encode(domains)
+	
+	domains, err := database.GetDomainsByUser(h.MongoClient, userID)
+	if err != nil {
+		response.InternalServerError(w, "Failed to fetch domains")
+		return
+	}
+	
+	response.JSON(w, domains, http.StatusOK)
 }
