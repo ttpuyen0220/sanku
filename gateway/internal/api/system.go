@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sync/atomic"
 	"time"
+	"web-app-firewall-ml-detection/pkg/response"
 )
 
 // ComponentStatus struct for System Status API
@@ -20,8 +21,6 @@ type ComponentStatus struct {
 }
 
 func (h *APIHandler) SystemStatus(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	statusMap := make(map[string]ComponentStatus)
 
 	// 1.GATEWAY STATS (Self)
@@ -58,7 +57,7 @@ func (h *APIHandler) SystemStatus(w http.ResponseWriter, r *http.Request) {
 	// 3.ML SCORER STATS
 	statusMap["ml_scorer"] = fetchRemoteHealth(h.MLURL)
 
-	json.NewEncoder(w).Encode(statusMap)
+	response.JSON(w, statusMap, http.StatusOK)
 }
 
 // Helper to fetch rich stats from Python services
